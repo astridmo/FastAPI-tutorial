@@ -10,25 +10,28 @@ __email__ = 'astridmo@nmbu.no'
 
 from typing import List, Optional
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Query
 from sqlmodel import Field, Session, SQLModel, create_engine, select
 
 
-class ToDo(SQLModel, table=True):
-    id: Optional[int] = Field(default=None, primary_key=True)
+class ToDoBase(SQLModel):
     title: str = Field(index=True)
     details: str
 
 
-class ToDoCreate(SQLModel):
-    title: str
-    details: str
+class ToDo(ToDoBase, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
 
 
-class ToDoRead(SQLModel):
+class ToDoCreate(ToDoBase):
+    """Create a ToDo"""
+    pass
+
+
+class ToDoRead(ToDoBase):
+    """Read ToDo's"""
     id: int
-    title: str
-    details: str
+
 
 
 sqlite_file_name = "todo_database.db"
@@ -61,9 +64,23 @@ def create_todo(todo: ToDoCreate):
 
 
 @app.get("/todo/", response_model=List[ToDo])
-def read_todo():
+def read_todos(offset: int = 0, limit: int = Query(default=100, lte=100)):
+    """
+    Read todos.
+    Returns the first results from database (offset=0), and a maximum of 100 todos (limit 100)
+    """
     with Session(engine) as session:
-        todo = session.exec(select(ToDo)).all()
+        todos = session.exec(select(ToDo).offset(offset).limit(limit)).all()
+        return todos
+
+
+@app.get("/todo/{todo_id}", response_model=ToDoRead)
+def read_todo(todo_id: int):
+    """Read hero based on hero_id"""
+    with Session(engine) as session:
+        todo = session.get(ToDo, todo_id)
+        if not todo:
+            raise HTTPException(status_code=404, detail="Todo not found")
         return todo
 
 
