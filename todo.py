@@ -33,6 +33,11 @@ class ToDoRead(ToDoBase):
     id: int
 
 
+class ToDoUpdate(SQLModel):
+    title: Optional[str] = None
+    details: Optional[str] = None
+
+
 
 sqlite_file_name = "todo_database.db"
 sqlite_url = f"sqlite:///{sqlite_file_name}"
@@ -82,6 +87,21 @@ def read_todo(todo_id: int):
         if not todo:
             raise HTTPException(status_code=404, detail="Todo not found")
         return todo
+
+
+@app.patch("/heroes/{hero_id}", response_model=ToDoRead)
+def update_hero(todo_id: int, todo: ToDoUpdate):
+    with Session(engine) as session:
+        db_todo = session.get(ToDo, todo_id)
+        if not db_todo:
+            raise HTTPException(status_code=404, detail="Todo not found")
+        todo_data = todo.dict(exclude_unset=True)
+        for key, value in todo_data.items():
+            setattr(db_todo, key, value)
+        session.add(db_todo)
+        session.commit()
+        session.refresh(db_todo)
+        return db_todo
 
 
 @app.delete("/heroes/{hero_id}")
