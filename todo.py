@@ -12,6 +12,8 @@ from typing import List, Optional
 
 from fastapi import Depends, FastAPI, HTTPException, Query
 from sqlmodel import Field, Session, SQLModel, create_engine, select
+from fastapi.security import OAuth2PasswordBearer
+from pydantic import BaseModel
 
 
 class ToDoBase(SQLModel):
@@ -56,6 +58,7 @@ def get_session():
 
 
 app = FastAPI()
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
 
 
 @app.on_event("startup")
@@ -72,9 +75,15 @@ def create_todo(*, session: Session = Depends(get_session), todo: ToDoCreate):
     return db_todo
 
 
+@app.get("/items/")
+async def read_items(token: str = Depends(oauth2_scheme)):
+    return {"token": token}
+
+
 @app.get("/todo/", response_model=List[ToDo])
 def read_todos(*, session: Session = Depends(get_session),
-               offset: int = 0, limit: int = Query(default=100, lte=100)):
+               offset: int = 0, limit: int = Query(default=100, lte=100),
+               token: str = Depends(oauth2_scheme)):
     """
     Read todos.
     Returns the first results from database (offset=0), and a maximum of 100 todos (limit 100)
