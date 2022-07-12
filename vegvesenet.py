@@ -18,11 +18,12 @@ header = {'SVV-Authorization': "428ef288-2da1-4c0d-847e-d34217db7af6"}
 #endpoint = 'https://www.vegvesen.no/ws/no/vegvesen/kjoretoy/felles/datautlevering/enkeltoppslag/kjoretoydata?kjennemerke=AS15000'
 reg_nummer = 'AS15000'
 reg_nummer = 'LJ48973'
+reg_nummer = 'LJ48973222'
 endpoint = f'https://www.vegvesen.no/ws/no/vegvesen/kjoretoy/felles/datautlevering/enkeltoppslag/kjoretoydata?kjennemerke={reg_nummer}'
 
 r = requests.get(endpoint, headers=header)  # Issue an HTTP GET request
 json_response = r.json()
-print(json_response)
+#print(json_response)
 #
 # print(r)
 # print(r.ok)
@@ -31,7 +32,7 @@ print(json_response)
 def valid_car_number(reg_nummer, endpoint, header):
     r = requests.get(endpoint, headers=header)  # Issue an HTTP GET request
     json_response = r.json()
-    if r.ok:  # If the car vehicle
+    if r.ok:  # If the vehicle exists
         print('Kjøretøyet eksisterer')
         vehicle_id = json_response['kjoretoydataListe'][0]['godkjenning']['tekniskGodkjenning']["tekniskeData"]["generelt"]
         vehicle_weight = json_response['kjoretoydataListe'][0]['godkjenning']['tekniskGodkjenning']["tekniskeData"]["vekter"]
@@ -44,6 +45,18 @@ def valid_car_number(reg_nummer, endpoint, header):
                            'vehicle_environmental_data': vehicle_environmental_data,
                            'motor': vehicle_motor}
         #print(vehicle_summary)
+        vehicle_environmental_data = \
+        vehicle_tillegg = json_response['kjoretoydataListe'][0]['godkjenning']['tilleggsgodkjenninger']
+        print(vehicle_tillegg)
+
+        try:
+            vehicle_tillegg2 = json_response['kjoretoydataListe'][0]['godkjenning']['tilleggsgodkjenninger'][0]['godkjenningstype']['kodeVerdi']
+            print(vehicle_tillegg2)
+            if vehicle_tillegg2 == 'ADR':
+                print(True)
+                dangerous_goods = True
+        except IndexError:  # Vehicle cannot transport dangerous goods
+            print(False)
     else:
         print('Fant ikke kjøretøy')
         print('Feilmelding fra Vegvesenet:', json_response)
