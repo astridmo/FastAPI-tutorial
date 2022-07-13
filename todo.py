@@ -8,14 +8,59 @@
 __author__ = 'Astrid Moum'
 __email__ = 'astridmo@nmbu.no'
 
+from datetime import datetime, timedelta
 from typing import List, Optional
 
-from fastapi import Depends, FastAPI, HTTPException, Query
+from fastapi import Depends, FastAPI, HTTPException, Query, status
 from sqlmodel import Field, Session, SQLModel, create_engine, select
-from fastapi.security import OAuth2PasswordBearer
+from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
+from jose import JWTError, jwt
 from pydantic import BaseModel
+from passlib.context import CryptContext
 
 
+SECRET_KEY = "3051c8f0f2e233b56703892b7dfbbe1f7f4ff1befb7964aa05e6800c6eb3898b"
+ALGORITHM = "HS256"
+ACCESS_TOKEN_EXPIRE_MINUTES = 30
+
+
+fake_users_db = {
+    "johndoe": {
+        "username": "johndoe",
+        "full_name": "John Doe",
+        "email": "johndoe@example.com",
+        "hashed_password": "$2b$12$EixZaYVK1fsbw1ZfbX3OXePaWxn96p36WQoeG6Lruj3vjPGga31lW",
+        "disabled": False,
+    }
+}
+
+# =================================
+# Classes for autheitication
+# =================================
+
+class Token(BaseModel):
+    access_token: str
+    token_type: str
+
+
+class TokenData(BaseModel):
+    username: str | None = None
+
+
+class User(SQLModel):
+    id: Optional[int] = Field(default=None, primary_key=True)
+    username: str
+    email: str | None = None
+    full_name: str | None = None
+    disabled: bool | None = None
+
+
+class UserInDB(User, table=True):
+    hashed_password: str
+
+# =============================
+# Classes for ToDo
+# =============================
 class ToDoBase(SQLModel):
     title: str = Field(index=True)
     details: str
@@ -40,12 +85,19 @@ class ToDoUpdate(SQLModel):
     details: Optional[str] = None
 
 
+# =======================================
+#
+# =======================================
 
 sqlite_file_name = "todo_database.db"
 sqlite_url = f"sqlite:///{sqlite_file_name}"
 
 connect_args = {"check_same_thread": False}
 engine = create_engine(sqlite_url, echo=True, connect_args=connect_args)
+
+app = FastAPI()
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 
 def create_db_and_tables():
@@ -56,9 +108,131 @@ def get_session():
     with Session(engine) as session:
         yield session
 
+# ================================
+# Functions for authentication
+# ================================
 
-app = FastAPI()
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
+
+def verify_password(plain_password, hashed_password):
+    return pwd_context.verify(plain_password, hashed_password)
+
+
+def get_password_hash(password):
+    return pwd_context.hash(password)
+
+
+##
+def get_user(db, username: str):
+    with Session(engine) as session:
+        statement = select(UserInDB).where(UserInDB.username == username)
+        results = session.exec(statement)
+        carrier = results.first()
+        return carrier
+
+        # todo = session.get(ToDo, todo_id)
+        # if not todo:
+        #     raise HTTPException(status_code=404, detail="Todo not found")
+        # return todo
+
+
+        # if username in db:
+        #     user_dict = db[username]
+        #     return UserInDB(**user_dict)
+        # print('HELLO', UserInDB.username)
+        # print('USER:', User)
+        # print('USERINDB', UserInDB)
+        # user = session.get(UserInDB, username)
+        # print('BBBBB:', user)
+        # if not user:
+        #     raise HTTPException(status_code=404, detail="User not found")
+        # return user
+
+get_user(db=None, username='johndoe')
+
+def authenticate_user(fake_db, username: str, password: str):
+    user = get_user(fake_db, username)
+    if not user:
+        return False
+    if not verify_password(password, user.hashed_password):
+        return False
+    return user
+
+
+def create_access_token(data: dict, expires_delta: timedelta | None = None):
+    to_encode = data.copy()
+    if expires_delta:
+        expire = datetime.utcnow() + expires_delta
+    else:
+        expire = datetime.utcnow() + timedelta(minutes=15)
+    to_encode.update({"exp": expire})
+    encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+    return encoded_jwt
+
+
+async def get_current_user(token: str = Depends(oauth2_scheme)):
+    credentials_exception = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Could not validate credentials",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        username: str = payload.get("sub")
+        if username is None:
+            raise credentials_exception
+        token_data = TokenData(username=username)
+    except JWTError:
+        raise credentials_exception
+    user = get_user(fake_users_db, username=token_data.username)
+    if user is None:
+        raise credentials_exception
+    return user
+
+
+async def get_current_active_user(current_user: User = Depends(get_current_user)):
+    if current_user.disabled:
+        raise HTTPException(status_code=400, detail="Inactive user")
+    return current_user
+
+
+@app.post("/token", response_model=Token)
+async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends()):
+    user = authenticate_user(fake_users_db, form_data.username, form_data.password)
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect username or password",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    access_token = create_access_token(
+        data={"sub": user.username}, expires_delta=access_token_expires
+    )
+    return {"access_token": access_token, "token_type": "bearer"}
+
+
+@app.get("/users/me")
+async def read_users_me(current_user: User = Depends(get_current_user)):
+    return current_user
+
+
+@app.get("/users/me/items/")
+async def read_own_items(current_user: User = Depends(get_current_active_user)):
+    return [{"item_id": "Foo", "owner": current_user.username}]
+
+
+@app.get("/user/{user_id}", response_model=User)
+def read_user(*, session: Session = Depends(get_session), user_id: int):
+    """Read hero based on hero_id"""
+    todo = session.get(UserInDB, user_id)
+    if not todo:
+        raise HTTPException(status_code=404, detail="Todo not found")
+    return todo
+
+# =================================
+# Functions for todo
+# =================================
+
 
 
 @app.on_event("startup")
@@ -75,15 +249,10 @@ def create_todo(*, session: Session = Depends(get_session), todo: ToDoCreate):
     return db_todo
 
 
-@app.get("/items/")
-async def read_items(token: str = Depends(oauth2_scheme)):
-    return {"token": token}
-
-
 @app.get("/todo/", response_model=List[ToDo])
 def read_todos(*, session: Session = Depends(get_session),
                offset: int = 0, limit: int = Query(default=100, lte=100),
-               token: str = Depends(oauth2_scheme)):
+               current_user: User = Depends(get_current_user)):
     """
     Read todos.
     Returns the first results from database (offset=0), and a maximum of 100 todos (limit 100)
@@ -102,7 +271,7 @@ def read_todo(*, session: Session = Depends(get_session), todo_id: int):
 
 
 @app.patch("/todo/{todo_id}", response_model=ToDoRead)
-def update_hero(*, session: Session = Depends(get_session), todo_id: int, todo: ToDoUpdate):
+def update_todo(*, session: Session = Depends(get_session), todo_id: int, todo: ToDoUpdate):
     db_todo = session.get(ToDo, todo_id)
     if not db_todo:
         raise HTTPException(status_code=404, detail="Todo not found")
