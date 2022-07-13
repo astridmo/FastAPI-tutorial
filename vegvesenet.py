@@ -14,11 +14,10 @@ import requests
 # Siden dere er selskap så kreves det videre at dere har de riktige rettigheten i Altinn
 # For mer informasjon : https://www.vegvesen.no/om-oss/om-organisasjonen/apne-data/et-utvalg-apne-data/api-for-tekniske-kjoretoyopplysninger/
 user_key = "428ef288-2da1-4c0d-847e-d34217db7af6"
-header = {'SVV-Authorization': "428ef288-2da1-4c0d-847e-d34217db7af6"}
-#endpoint = 'https://www.vegvesen.no/ws/no/vegvesen/kjoretoy/felles/datautlevering/enkeltoppslag/kjoretoydata?kjennemerke=AS15000'
+header = {'SVV-Authorization': user_key}
 reg_nummer = 'AS15000'
 reg_nummer = 'LJ48973'
-reg_nummer = 'LJ48973222'
+reg_nummer = 'RK95856'
 endpoint = f'https://www.vegvesen.no/ws/no/vegvesen/kjoretoy/felles/datautlevering/enkeltoppslag/kjoretoydata?kjennemerke={reg_nummer}'
 
 r = requests.get(endpoint, headers=header)  # Issue an HTTP GET request
