@@ -38,8 +38,8 @@ class TokenData(BaseModel):
 
 
 class UserBase(SQLModel):
-    id: Optional[int] = Field(default=None, primary_key=True)
-    username: str
+    #id: Optional[int] = Field(default=None, primary_key=True)
+    username: str = Field(primary_key=True)
     email: str | None = None
     full_name: str | None = None
     disabled: bool | None = None
@@ -98,6 +98,10 @@ def get_session():
     with Session(engine) as session:
         yield session
 
+@app.on_event("startup")
+def on_startup():
+    create_db_and_tables()
+
 # ================================
 # Functions for authentication
 # ================================
@@ -111,31 +115,10 @@ def get_password_hash(password):
     return pwd_context.hash(password)
 
 
-##
 def get_user(username: str):
     with Session(engine) as session:
-        statement = select(UserInDB).where(UserInDB.username == username)
-        results = session.exec(statement)
-        carrier = results.first()
-        return carrier
-
-        # todo = session.get(ToDo, todo_id)
-        # if not todo:
-        #     raise HTTPException(status_code=404, detail="Todo not found")
-        # return todo
-
-
-        # if username in db:
-        #     user_dict = db[username]
-        #     return UserInDB(**user_dict)
-        # print('HELLO', UserInDB.username)
-        # print('USER:', User)
-        # print('USERINDB', UserInDB)
-        # user = session.get(UserInDB, username)
-        # print('BBBBB:', user)
-        # if not user:
-        #     raise HTTPException(status_code=404, detail="User not found")
-        # return user
+        user = session.get(UserInDB, username)
+        return user
 
 
 def authenticate_user(username: str, password: str):
@@ -224,9 +207,7 @@ def read_user(*, session: Session = Depends(get_session), user_id: int):
 
 
 
-@app.on_event("startup")
-def on_startup():
-    create_db_and_tables()
+
 
 
 @app.post("/todo/", response_model=ToDoRead)
