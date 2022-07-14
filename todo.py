@@ -24,16 +24,6 @@ ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 30
 
 
-fake_users_db = {
-    "johndoe": {
-        "username": "johndoe",
-        "full_name": "John Doe",
-        "email": "johndoe@example.com",
-        "hashed_password": "$2b$12$EixZaYVK1fsbw1ZfbX3OXePaWxn96p36WQoeG6Lruj3vjPGga31lW",
-        "disabled": False,
-    }
-}
-
 # =================================
 # Classes for autheitication
 # =================================
@@ -47,7 +37,7 @@ class TokenData(BaseModel):
     username: str | None = None
 
 
-class User(SQLModel):
+class UserBase(SQLModel):
     id: Optional[int] = Field(default=None, primary_key=True)
     username: str
     email: str | None = None
@@ -55,7 +45,7 @@ class User(SQLModel):
     disabled: bool | None = None
 
 
-class UserInDB(User, table=True):
+class UserInDB(UserBase, table=True):
     hashed_password: str
 
 # =============================
@@ -122,7 +112,7 @@ def get_password_hash(password):
 
 
 ##
-def get_user(db, username: str):
+def get_user(username: str):
     with Session(engine) as session:
         statement = select(UserInDB).where(UserInDB.username == username)
         results = session.exec(statement)
@@ -147,10 +137,9 @@ def get_user(db, username: str):
         #     raise HTTPException(status_code=404, detail="User not found")
         # return user
 
-get_user(db=None, username='johndoe')
 
-def authenticate_user(fake_db, username: str, password: str):
-    user = get_user(fake_db, username)
+def authenticate_user(username: str, password: str):
+    user = get_user(username)
     if not user:
         return False
     if not verify_password(password, user.hashed_password):
@@ -183,13 +172,13 @@ async def get_current_user(token: str = Depends(oauth2_scheme)):
         token_data = TokenData(username=username)
     except JWTError:
         raise credentials_exception
-    user = get_user(fake_users_db, username=token_data.username)
+    user = get_user(username=token_data.username)
     if user is None:
         raise credentials_exception
     return user
 
 
-async def get_current_active_user(current_user: User = Depends(get_current_user)):
+async def get_current_active_user(current_user: UserBase = Depends(get_current_user)):
     if current_user.disabled:
         raise HTTPException(status_code=400, detail="Inactive user")
     return current_user
@@ -197,7 +186,7 @@ async def get_current_active_user(current_user: User = Depends(get_current_user)
 
 @app.post("/token", response_model=Token)
 async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends()):
-    user = authenticate_user(fake_users_db, form_data.username, form_data.password)
+    user = authenticate_user(form_data.username, form_data.password)
     if not user:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -212,16 +201,16 @@ async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(
 
 
 @app.get("/users/me")
-async def read_users_me(current_user: User = Depends(get_current_user)):
+async def read_users_me(current_user: UserBase = Depends(get_current_user)):
     return current_user
 
 
 @app.get("/users/me/items/")
-async def read_own_items(current_user: User = Depends(get_current_active_user)):
+async def read_own_items(current_user: UserBase = Depends(get_current_active_user)):
     return [{"item_id": "Foo", "owner": current_user.username}]
 
 
-@app.get("/user/{user_id}", response_model=User)
+@app.get("/user/{user_id}", response_model=UserBase)
 def read_user(*, session: Session = Depends(get_session), user_id: int):
     """Read hero based on hero_id"""
     todo = session.get(UserInDB, user_id)
@@ -252,7 +241,7 @@ def create_todo(*, session: Session = Depends(get_session), todo: ToDoCreate):
 @app.get("/todo/", response_model=List[ToDo])
 def read_todos(*, session: Session = Depends(get_session),
                offset: int = 0, limit: int = Query(default=100, lte=100),
-               current_user: User = Depends(get_current_user)):
+               current_user: UserBase = Depends(get_current_user)):
     """
     Read todos.
     Returns the first results from database (offset=0), and a maximum of 100 todos (limit 100)
