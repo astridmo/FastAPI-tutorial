@@ -35,6 +35,20 @@ print(json_response['_embedded']['enheter'])
 
 
 def existing_company(organization_num):
+    """
+    Function to check if organization exists in Norway.
+    The information is gathered from Enhetsregisteret in Brønnøysundsregisteret
+
+    Parameters
+    ----------
+    organization_num : str
+        organization number of the company
+
+    Returns
+    -------
+    boolean
+        True if the company exists. False if not.
+    """
     endpoint = f'https://data.brreg.no/enhetsregisteret/api/enheter?organisasjonsnummer={organization_num}'
     r = requests.get(endpoint)  # Issue an HTTP GET request
     json_response = r.json()
