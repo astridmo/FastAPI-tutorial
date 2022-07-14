@@ -52,7 +52,7 @@ def existing_company(organization_num):
     endpoint = f'https://data.brreg.no/enhetsregisteret/api/enheter?organisasjonsnummer={organization_num}'
     r = requests.get(endpoint)  # Issue an HTTP GET request
     json_response = r.json()
-    try:
+    try:  # Check if this key exists in the json response
         json_response['_embedded']['enheter']
         return True
     except KeyError:  # The company does not exist (either it has never existed or it is shut down)
