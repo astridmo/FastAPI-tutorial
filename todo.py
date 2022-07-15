@@ -237,7 +237,7 @@ def read_todos(*, session: Session = Depends(get_session),
     Read todos.
     Returns the first results from database (offset=0), and a maximum of 100 todos (limit 100)
     """
-    todos = session.exec(select(ToDo).offset(offset).limit(limit)).all()
+    todos = session.exec(select(ToDo).where(ToDo.user_id == current_user.username).offset(offset).limit(limit)).all()
     return todos
 
 
