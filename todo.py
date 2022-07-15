@@ -12,7 +12,7 @@ from datetime import datetime, timedelta
 from typing import List, Optional
 
 from fastapi import Depends, FastAPI, HTTPException, Query, status
-from sqlmodel import Field, Session, SQLModel, create_engine, select
+from sqlmodel import Field, Session, SQLModel, create_engine, select, Relationship
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from jose import JWTError, jwt
 from pydantic import BaseModel
@@ -47,6 +47,8 @@ class UserBase(SQLModel):
 
 class UserInDB(UserBase, table=True):
     hashed_password: str
+    todos: List["ToDo"] = Relationship(back_populates="userindb")
+
 
 # =============================
 # Classes for ToDo
@@ -56,8 +58,13 @@ class ToDoBase(SQLModel):
     details: str
 
 
+
 class ToDo(ToDoBase, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
+    user_id: str = Field(default=None, foreign_key="userindb.username")
+    user: UserInDB = Relationship(back_populates="todos")
+
+
 
 
 class ToDoCreate(ToDoBase):
@@ -193,26 +200,29 @@ async def read_own_items(current_user: UserBase = Depends(get_current_active_use
     return [{"item_id": "Foo", "owner": current_user.username}]
 
 
-@app.get("/user/{user_id}", response_model=UserBase)
-def read_user(*, session: Session = Depends(get_session), user_id: int):
-    """Read hero based on hero_id"""
-    todo = session.get(UserInDB, user_id)
-    if not todo:
-        raise HTTPException(status_code=404, detail="Todo not found")
-    return todo
+# @app.get("/user/{user_id}", response_model=UserBase)
+# def read_user(*, session: Session = Depends(get_session), user_id: int):
+#     """Read hero based on hero_id"""
+#     todo = session.get(UserInDB, user_id)
+#     if not todo:
+#         raise HTTPException(status_code=404, detail="Todo not found")
+#     return todo
+
 
 # =================================
 # Functions for todo
 # =================================
-
-
-
-
-
-
 @app.post("/todo/", response_model=ToDoRead)
-def create_todo(*, session: Session = Depends(get_session), todo: ToDoCreate):
+def create_todo(*, session: Session = Depends(get_session), todo: ToDoCreate,
+                current_user: UserBase = Depends(get_current_user)):
+    # with Session(engine) as session:
+    #     todo_db = ToDo.from_orm(todo)
+    #     todo_db.user_id = current_user.username
+    #     session.add(todo_db)
+    #     session.commit()
+    #     #return todo_db
     db_todo = ToDo.from_orm(todo)
+    db_todo.user_id = current_user.username
     session.add(db_todo)
     session.commit()
     session.refresh(db_todo)
@@ -241,7 +251,8 @@ def read_todo(*, session: Session = Depends(get_session), todo_id: int):
 
 
 @app.patch("/todo/{todo_id}", response_model=ToDoRead)
-def update_todo(*, session: Session = Depends(get_session), todo_id: int, todo: ToDoUpdate):
+def update_todo(*, session: Session = Depends(get_session), todo_id: int, todo: ToDoUpdate,
+                current_user: UserBase = Depends(get_current_user)):
     db_todo = session.get(ToDo, todo_id)
     if not db_todo:
         raise HTTPException(status_code=404, detail="Todo not found")
@@ -255,10 +266,20 @@ def update_todo(*, session: Session = Depends(get_session), todo_id: int, todo: 
 
 
 @app.delete("/todo/{todo_id}")
-def delete_todo(*, session: Session = Depends(get_session), todo_id: int):
+def delete_todo(*, session: Session = Depends(get_session), todo_id: int,
+                current_user: UserBase = Depends(get_current_user)):
     todo = session.get(ToDo, todo_id)
     if not todo:
         raise HTTPException(status_code=404, detail="Todo not found")
     session.delete(todo)
     session.commit()
     return {"ok": True}
+
+# @app.get("/todo/owner/{todo_id}")
+# def read_owner(*, session: Session = Depends(get_session), todo_id: int):
+#     """Read hero based on hero_id"""
+#     todo = session.get(ToDo, todo_id)
+#     if not todo:
+#         raise HTTPException(status_code=404, detail="Todo not found")
+#     owner = todo.user
+#     return {"owner": owner}
