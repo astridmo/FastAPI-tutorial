@@ -47,7 +47,7 @@ class UserBase(SQLModel):
 
 class UserInDB(UserBase, table=True):
     hashed_password: str
-    todos: List["ToDo"] = Relationship(back_populates="userindb")
+    todos: List["ToDo"] = Relationship(back_populates="user")
 
 
 # =============================
@@ -61,8 +61,8 @@ class ToDoBase(SQLModel):
 
 class ToDo(ToDoBase, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
-    user_id: str = Field(default=None, foreign_key="userindb.username")
-    user: UserInDB = Relationship(back_populates="todos")
+    user_id: Optional[str] = Field(default=None, foreign_key="userindb.username")
+    user: Optional[UserInDB] = Relationship(back_populates="todos")
 
 
 
@@ -222,7 +222,8 @@ def create_todo(*, session: Session = Depends(get_session), todo: ToDoCreate,
     #     session.commit()
     #     #return todo_db
     db_todo = ToDo.from_orm(todo)
-    db_todo.user_id = current_user.username
+    #db_todo.user_id = current_user.username
+    db_todo.user = current_user
     session.add(db_todo)
     session.commit()
     session.refresh(db_todo)
@@ -275,11 +276,23 @@ def delete_todo(*, session: Session = Depends(get_session), todo_id: int,
     session.commit()
     return {"ok": True}
 
-# @app.get("/todo/owner/{todo_id}")
-# def read_owner(*, session: Session = Depends(get_session), todo_id: int):
-#     """Read hero based on hero_id"""
-#     todo = session.get(ToDo, todo_id)
-#     if not todo:
-#         raise HTTPException(status_code=404, detail="Todo not found")
-#     owner = todo.user
-#     return {"owner": owner}
+@app.get("/todo/owner/{todo_id}")
+def read_owner(*, session: Session = Depends(get_session), todo_id: int,
+               current_user: UserBase = Depends(get_current_user)):
+    """Read hero based on hero_id"""
+    # statement = select(ToDo).where(ToDo.user_id == current_user.username)
+    # result = session.exec(statement)
+    # print(result)
+    # return {'result': 'ok'}
+    # one_todo = result.one()
+    # user_of_todo = one_todo.user
+    # return user_of_todo
+
+    todo = session.get(ToDo, todo_id)
+    if not todo:
+        raise HTTPException(status_code=404, detail="Todo not found")
+    owner = todo.user
+    return {"owner": owner}
+
+    # todos = current_user.todos
+    # return todos
