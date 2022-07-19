@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 """
-Does not work
+Example for a mail containing html-body with a link and an image
 """
 
 __author__ = 'Astrid Moum'
@@ -11,7 +11,6 @@ __email__ = 'astridmo@nmbu.no'
 import smtplib, ssl
 
 from email.message import EmailMessage
-from email.headerregistry import Address
 from email.utils import make_msgid
 
 smtp_server = "smtp.office365.com"
